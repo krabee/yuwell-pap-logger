@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}อัปโหลด — Yuwell PAP Logger{% endblock %}
+
+{% block content %}
+<h1>อัปโหลดข้อมูลจาก SD card</h1>
+
+<div class="card">
+  <div id="dropzone" class="dropzone">
+    <p><strong>ลากไฟล์มาวางที่นี่</strong> หรือเลือกด้วยปุ่มด้านล่าง</p>
+    <div class="pickers">
+      <label class="button">
+        เลือกไฟล์ / zip
+        <input type="file" id="pick-files" multiple accept=".bys,.BYS,.zip" hidden>
+      </label>
+      <label class="button">
+        เลือกทั้งโฟลเดอร์
+        <input type="file" id="pick-folder" webkitdirectory directory hidden>
+      </label>
+    </div>
+  </div>
+
+  <p class="hint">
+    มีไฟล์เยอะ (หลายร้อยไฟล์)? <strong>zip ทั้งโฟลเดอร์แล้วอัปไฟล์เดียว</strong>เร็วและทนที่สุด
+    — ระบบจะแตกไฟล์ให้เอง<br>
+    อัปไฟล์ซ้ำได้เสมอ ระบบเทียบด้วย SHA-256 แล้วข้ามไฟล์ที่เคยนำเข้าแล้ว
+    ถ้าอัปขาดกลางคัน อัปใหม่ทั้งชุดได้เลย จะทำต่อจากเดิมเอง<br>
+    ต่อครั้งไม่เกิน {{ max_files_per_request }} ไฟล์ / {{ max_upload_mb }} MB
+    (ระบบแบ่งส่งเป็นชุดให้อัตโนมัติ)
+  </p>
+</div>
+
+<div class="card" id="progress-card" hidden>
+  <h2>กำลังนำเข้า</h2>
+  <div class="progress"><div class="bar" id="bar"></div></div>
+  <p id="progress-text">เตรียมข้อมูล…</p>
+
+  <div class="counts">
+    <span class="pill ok">นำเข้าแล้ว <b id="c-imported">0</b></span>
+    <span class="pill skip">ข้ามเพราะซ้ำ <b id="c-duplicate">0</b></span>
+    <span class="pill bad">ไม่สำเร็จ <b id="c-failed">0</b></span>
+  </div>
+
+  <details id="log-details">
+    <summary>รายละเอียดรายไฟล์</summary>
+    <table class="log">
+      <thead><tr><th>ไฟล์</th><th>สถานะ</th><th>คืน</th><th>นาที</th><th>AHI</th><th>หมายเหตุ</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table>
+  </details>
+
+  <p id="finished" hidden>
+    เสร็จแล้ว — <a href="/sessions">ดูรายการ session</a> หรือ
+    <a href="{{ grafana_url }}" target="_blank" rel="noopener">เปิดกราฟใน Grafana ↗</a>
+  </p>
+</div>
+
+<script>
+  window.PAP_MAX_FILES = {{ max_files_per_request }};
+</script>
+<script src="/static/upload.js"></script>
+{% endblock %}

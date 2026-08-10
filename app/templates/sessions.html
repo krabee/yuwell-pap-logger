@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Session — Yuwell PAP Logger{% endblock %}
+
+{% block content %}
+<h1>Session ของ {{ user.username }}</h1>
+
+<div class="stats">
+  <div class="stat"><span class="label">จำนวนคืน</span><span class="value">{{ total_nights }}</span></div>
+  <div class="stat"><span class="label">จำนวน session</span><span class="value">{{ total_sessions }}</span></div>
+  <div class="stat"><span class="label">ชั่วโมงเฉลี่ย/คืน</span><span class="value">{{ "%.1f"|format(hours_per_night) }}</span></div>
+  <div class="stat"><span class="label">ชั่วโมงรวม</span><span class="value">{{ "%.1f"|format(total_hours) }}</span></div>
+  <div class="stat"><span class="label">AHI เฉลี่ย</span><span class="value">{{ "%.1f"|format(average_ahi) }}</span></div>
+</div>
+
+{% if uploads %}
+<p class="hint">
+  เครื่องสร้างไฟล์ใหม่ทุกครั้งที่เปิดใช้ คืนหนึ่งจึงมักมีหลาย session — ตัวเลขด้านบนรวมให้แล้ว
+  โดย AHI ถ่วงน้ำหนักตามความยาวของแต่ละ session<br>
+  แสดง {{ uploads|length }} รายการล่าสุด — ดูกราฟรายนาทีและแนวโน้มระยะยาวได้ที่
+  <a href="{{ grafana_url }}" target="_blank" rel="noopener">Grafana ↗</a>
+</p>
+
+<table class="sessions">
+  <thead>
+    <tr>
+      <th>คืนของวันที่</th><th>เริ่ม (UTC)</th><th>นาที</th>
+      <th>AHI</th><th>แรงดันเฉลี่ย</th><th>P90</th><th>รั่วเฉลี่ย</th>
+      <th>เครื่อง</th><th>ไฟล์</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in uploads %}
+    <tr>
+      <td>{{ u.night_date }}</td>
+      <td>{{ u.session_start.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td>{{ u.duration_minutes }}</td>
+      <td>{{ "%.1f"|format(u.ahi) }}</td>
+      <td>{{ "%.1f"|format(u.avg_pressure) }}</td>
+      <td>{{ "%.1f"|format(u.p90_pressure) }}</td>
+      <td>{{ "%.1f"|format(u.avg_leak) }}</td>
+      <td class="mono">{{ u.serial }}</td>
+      <td class="mono" title="{{ u.warnings }}">
+        {{ u.filename }}{% if u.warnings %} <span class="warn" title="{{ u.warnings }}">⚠</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card">
+  <p>ยังไม่มีข้อมูล — <a href="/">อัปโหลดไฟล์จาก SD card</a> เพื่อเริ่มต้น</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: PAP dashboards
+    orgId: 1
+    folder: PAP
+    type: file
+    # Dashboards are code: edits made in the UI are overwritten on restart. Change
+    # the JSON in this directory instead.
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

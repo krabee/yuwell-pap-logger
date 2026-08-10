@@ -1,0 +1,141 @@
+{
+  "uid": "pap-nightly",
+  "title": "PAP — รายคืน (Nightly detail)",
+  "description": "แรงดัน การรั่ว และ event รายนาที — ตัวแปร user ใช้สลับดูเท่านั้น ไม่ใช่ขอบเขตความปลอดภัย",
+  "tags": ["pap", "cpap"],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": { "from": "now-2d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "label": "ผู้ใช้",
+        "type": "query",
+        "datasource": { "type": "influxdb", "uid": "pap-influx" },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: v.defaultBucket, tag: \"user\", start: -10y)",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "ตัวเลขบนหน้านี้อ่านจากไฟล์ของเครื่องโดยตรง **ไม่ใช่อุปกรณ์การแพทย์ ห้ามใช้เพื่อการวินิจฉัย** · รูปแบบไฟล์อ้างอิงจาก [Centurix/djmed](https://github.com/Centurix/djmed) · ตัวแปร **ผู้ใช้** ด้านบนมีไว้สลับดูเท่านั้น — ทุกคนที่เข้า Grafana นี้ได้ เห็นข้อมูลของทุกคน"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "แรงดัน (cmH₂O)",
+      "datasource": { "type": "influxdb", "uid": "pap-influx" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 3 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_minute\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "การรั่วของหน้ากาก (Lpm)",
+      "datasource": { "type": "influxdb", "uid": "pap-influx" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "color": { "mode": "fixed", "fixedColor": "orange" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_minute\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"leak\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "เหตุการณ์รายนาที (OAI / HI / CAI)",
+      "description": "จำนวน event ในแต่ละนาที — OAI อุดกั้น, HI หายใจแผ่ว, CAI ส่วนกลาง",
+      "datasource": { "type": "influxdb", "uid": "pap-influx" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "showPoints": "never",
+            "stacking": { "mode": "normal" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_minute\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"oai\" or r._field == \"hi\" or r._field == \"cai\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Session ในช่วงที่เลือก",
+      "datasource": { "type": "influxdb", "uid": "pap-influx" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 20 },
+      "fieldConfig": { "defaults": { "decimals": 1 }, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "query": "// group() collapses the per-night_date tag groups into one table —\n// without it Grafana renders one table per night. The float() cast is needed\n// because duration_min is an integer and pivot refuses mixed value types.\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"ahi\" or r._field == \"duration_min\" or r._field == \"avg_pressure\" or r._field == \"p90_pressure\" or r._field == \"avg_leak\")\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) }))\n  |> group()\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"duration_min\", \"ahi\", \"avg_pressure\", \"p90_pressure\", \"avg_leak\"])\n  |> sort(columns: [\"_time\"], desc: true)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# Reads the same INFLUX_* values the app uses, passed through by docker-compose, so
+# that switching to an external InfluxDB moves Grafana with it.
+apiVersion: 1
+
+datasources:
+  - name: PAP
+    uid: pap-influx
+    type: influxdb
+    access: proxy
+    url: ${INFLUX_URL}
+    isDefault: true
+    editable: false
+    jsonData:
+      version: Flux
+      organization: ${INFLUX_ORG}
+      defaultBucket: ${INFLUX_BUCKET}
+      tlsSkipVerify: false
+      timeInterval: 1m
+    secureJsonData:
+      token: ${INFLUX_TOKEN}

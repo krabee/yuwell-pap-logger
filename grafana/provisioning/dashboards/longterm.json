@@ -1,0 +1,855 @@
+{
+  "uid": "pap-longterm",
+  "title": "PAP — แนวโน้มระยะยาว (Long-term)",
+  "description": "AHI ชั่วโมงใช้งาน แรงดัน และการรั่ว รวมต่อคืน — ตัวแปร user ใช้สลับดูเท่านั้น ไม่ใช่ขอบเขตความปลอดภัย",
+  "tags": [
+    "pap",
+    "cpap"
+  ],
+  "timezone": "browser",
+  "editable": false,
+  "schemaVersion": 39,
+  "refresh": "",
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "label": "ผู้ใช้",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "pap-influx"
+        },
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: v.defaultBucket, tag: \"user\", start: -10y)",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {}
+      },
+      {
+        "name": "awake_gap",
+        "label": "นับเป็นการตื่นเมื่อหยุดเครื่องนานกว่า (นาที)",
+        "type": "custom",
+        "query": "2,5,10,15,20,30,60",
+        "options": [
+          {
+            "text": "2",
+            "value": "2",
+            "selected": false
+          },
+          {
+            "text": "5",
+            "value": "5",
+            "selected": false
+          },
+          {
+            "text": "10",
+            "value": "10",
+            "selected": true
+          },
+          {
+            "text": "15",
+            "value": "15",
+            "selected": false
+          },
+          {
+            "text": "20",
+            "value": "20",
+            "selected": false
+          },
+          {
+            "text": "30",
+            "value": "30",
+            "selected": false
+          },
+          {
+            "text": "60",
+            "value": "60",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "10",
+          "value": "10"
+        },
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "ทุกตัวเลขบนหน้านี้ **รวมทุก session ที่อยู่ในคืนเดียวกัน** — เครื่องสร้างไฟล์ใหม่ทุกครั้งที่เปิดใช้ ดังนั้นคืนหนึ่งมักมี 2–4 session · **จำนวนครั้งที่ตื่น** ประมาณจากช่วงที่เครื่องหยุดทำงาน นานกว่าเกณฑ์ที่เลือกไว้ด้านบน ไม่ใช่การวัดการตื่นทางการแพทย์ และจับไม่ได้ถ้าถอดหน้ากากโดยไม่ปิดเครื่อง · เกณฑ์อ้างอิง AHI ที่ใช้ระบายสี: 0–4 / 5–14 / 15–29 / 30+ · **ไม่ใช่อุปกรณ์การแพทย์ ห้ามใช้เพื่อการวินิจฉัย** ปรึกษาแพทย์ก่อนเปลี่ยนแปลงการรักษาเสมอ · รูปแบบไฟล์อ้างอิงจาก [Centurix/djmed](https://github.com/Centurix/djmed)"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "AHI เฉลี่ยต่อคืน",
+      "description": "ค่าเฉลี่ยของ AHI รายคืน · AHI ของแต่ละคืน = (event ทั้งหมดในคืนนั้น ÷ นาทีที่ใช้จริงทั้งคืน) × 60",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// AHI ต่อคืน: รวม event และนาทีของทุก session ในคืนเดียวกันก่อนแล้วค่อยหาร\n// การเฉลี่ย AHI ของแต่ละ session ตรง ๆ จะให้ session สั้น 15 นาที มีน้ำหนักเท่ากับ session 5 ชั่วโมง\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"oai_total\" or r._field == \"hi_total\" or r._field == \"cai_total\" or r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {events: 0, minutes: 0},\n       fn: (r, accumulator) => ({\n         events: accumulator.events + r.oai_total + r.hi_total + r.cai_total,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0 then float(v: r.events) / float(v: r.minutes) * 60.0 else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "จำนวนคืนที่มีข้อมูล",
+      "description": "นับคืนที่ไม่ซ้ำกัน ไม่ใช่จำนวนไฟล์ session",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "count"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// หนึ่งแถวต่อหนึ่งคืน — เครื่องเขียนหลายไฟล์ต่อคืน การนับ point ตรง ๆ จะได้จำนวน session\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sum()\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r._value) }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "ชั่วโมงใช้งานเฉลี่ยต่อคืน",
+      "description": "รวมทุก session ในคืนเดียวกันก่อน แล้วจึงเฉลี่ยข้ามคืน",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sum()\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r._value) / 60.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "P90 แรงดัน",
+      "description": "เปอร์เซ็นไทล์ที่ 90 ของแรงดันรายนาทีตลอดช่วงที่เลือก (ไม่ใช่ค่าเฉลี่ยของ P90 รายคืน)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_minute\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"pressure\")\n  |> group()\n  |> quantile(q: 0.9, method: \"estimate_tdigest\")"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "ตื่นเฉลี่ยต่อคืน",
+      "description": "นับจากช่วงที่เครื่องหยุดทำงานนานกว่า $awake_gap นาทีระหว่างคืน — เป็นค่าประมาณจากการที่เครื่องถูกปิด/เปิด ไม่ใช่การวัดการตื่นทางการแพทย์ ถ้าถอดหน้ากากแต่ไม่ปิดเครื่อง จะนับไม่ได้",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// นับ \"ตื่น\" จากช่องว่างระหว่าง session ที่ยาวกว่าเกณฑ์ $awake_gap นาที\n// reduce เดินทีละแถวตามลำดับเวลา เก็บเวลาสิ้นสุดของ session ก่อนหน้าไว้เทียบกับเวลาเริ่มของอันถัดไป\n// เกณฑ์จำเป็น: ในข้อมูลจริง 81% ของช่องว่างยาวแค่ 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sort(columns: [\"_time\"])\n  |> reduce(\n      identity: {prevEnd: 0, awakenings: 0, offMinutes: 0.0, started: false},\n      fn: (r, accumulator) => {\n        startNs = int(v: r._time)\n        endNs = startNs + int(v: r._value) * 60000000000\n        gapMin = if accumulator.started then float(v: startNs - accumulator.prevEnd) / 60000000000.0 else 0.0\n        counts = gapMin >= float(v: ${awake_gap})\n        return {\n          prevEnd: endNs,\n          started: true,\n          awakenings: accumulator.awakenings + (if counts then 1 else 0),\n          offMinutes: accumulator.offMinutes + (if counts then gapMin else 0.0)\n        }\n      })\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r.awakenings) }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "จำนวนครั้งที่ตื่น รายคืน",
+      "description": "ช่องว่างระหว่าง session ที่ยาวกว่า $awake_gap นาที — ปรับเกณฑ์ได้ที่ตัวเลือกด้านบนของหน้า",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 9,
+        "x": 6,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ครั้งที่ตื่น"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// นับ \"ตื่น\" จากช่องว่างระหว่าง session ที่ยาวกว่าเกณฑ์ $awake_gap นาที\n// reduce เดินทีละแถวตามลำดับเวลา เก็บเวลาสิ้นสุดของ session ก่อนหน้าไว้เทียบกับเวลาเริ่มของอันถัดไป\n// เกณฑ์จำเป็น: ในข้อมูลจริง 81% ของช่องว่างยาวแค่ 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sort(columns: [\"_time\"])\n  |> reduce(\n      identity: {prevEnd: 0, awakenings: 0, offMinutes: 0.0, started: false},\n      fn: (r, accumulator) => {\n        startNs = int(v: r._time)\n        endNs = startNs + int(v: r._value) * 60000000000\n        gapMin = if accumulator.started then float(v: startNs - accumulator.prevEnd) / 60000000000.0 else 0.0\n        counts = gapMin >= float(v: ${awake_gap})\n        return {\n          prevEnd: endNs,\n          started: true,\n          awakenings: accumulator.awakenings + (if counts then 1 else 0),\n          offMinutes: accumulator.offMinutes + (if counts then gapMin else 0.0)\n        }\n      })\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r.awakenings) }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "เวลาที่ตื่นรวม รายคืน",
+      "description": "ผลรวมของช่องว่างที่นับเป็นการตื่น (ยาวกว่า $awake_gap นาที) — คืนที่ไม่มีแท่งคือคืนที่ไม่ได้หยุดเครื่องนานขนาดนั้นเลย",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 9,
+        "x": 15,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "นาทีที่ตื่น"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// นับ \"ตื่น\" จากช่องว่างระหว่าง session ที่ยาวกว่าเกณฑ์ $awake_gap นาที\n// reduce เดินทีละแถวตามลำดับเวลา เก็บเวลาสิ้นสุดของ session ก่อนหน้าไว้เทียบกับเวลาเริ่มของอันถัดไป\n// เกณฑ์จำเป็น: ในข้อมูลจริง 81% ของช่องว่างยาวแค่ 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sort(columns: [\"_time\"])\n  |> reduce(\n      identity: {prevEnd: 0, awakenings: 0, offMinutes: 0.0, started: false},\n      fn: (r, accumulator) => {\n        startNs = int(v: r._time)\n        endNs = startNs + int(v: r._value) * 60000000000\n        gapMin = if accumulator.started then float(v: startNs - accumulator.prevEnd) / 60000000000.0 else 0.0\n        counts = gapMin >= float(v: ${awake_gap})\n        return {\n          prevEnd: endNs,\n          started: true,\n          awakenings: accumulator.awakenings + (if counts then 1 else 0),\n          offMinutes: accumulator.offMinutes + (if counts then gapMin else 0.0)\n        }\n      })\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: r.offMinutes }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "AHI รายคืน",
+      "description": "หนึ่งจุดต่อหนึ่งคืน (รวมทุก session ในคืนนั้น) พร้อมเส้นค่าเฉลี่ยเคลื่อนที่ 7 คืน",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "custom.drawStyle",
+                "value": "line"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "เฉลี่ย 7 คืน"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "AHI"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"oai_total\" or r._field == \"hi_total\" or r._field == \"cai_total\" or r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {events: 0, minutes: 0},\n       fn: (r, accumulator) => ({\n         events: accumulator.events + r.oai_total + r.hi_total + r.cai_total,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0 then float(v: r.events) / float(v: r.minutes) * 60.0 else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"oai_total\" or r._field == \"hi_total\" or r._field == \"cai_total\" or r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {events: 0, minutes: 0},\n       fn: (r, accumulator) => ({\n         events: accumulator.events + r.oai_total + r.hi_total + r.cai_total,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0 then float(v: r.events) / float(v: r.minutes) * 60.0 else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])\n  |> movingAverage(n: 7)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "ชั่วโมงใช้งานต่อคืน",
+      "description": "รวมทุก session ในคืนเดียวกัน · เส้นประที่ 4 ชั่วโมงคือเกณฑ์ compliance ที่นิยมใช้อ้างอิง",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ชั่วโมง/คืน"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sum()\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r._value) / 60.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "จำนวน session ต่อคืน",
+      "description": "จำนวนไฟล์ที่เครื่องเขียนในคืนนั้น — **ไม่ใช่จำนวนครั้งที่ตื่น** ช่องว่างส่วนใหญ่ระหว่าง session ยาวเพียง 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น ดูจำนวนครั้งที่ตื่นจาก panel ด้านบนที่มีเกณฑ์เวลากำกับ",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1
+          },
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "session/คืน"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> count()\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r._value) }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "แรงดันและการรั่ว รายคืน",
+      "description": "ถ่วงน้ำหนักตามความยาวของแต่ละ session ไม่ใช่เฉลี่ยแบบให้ทุก session เท่ากัน",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "แรงดันเฉลี่ย (cmH₂O)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "การรั่วเฉลี่ย (Lpm)"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "// ถ่วงน้ำหนักด้วยนาที: sum(ค่าเฉลี่ย x นาที) / sum(นาที)\n// ไม่งั้น session 15 นาทีตอนตี 5 จะดึงค่าทั้งคืนไปเท่ากับ session 5 ชั่วโมง\n// float() ต้องมาก่อน pivot เพราะ duration_min เป็น integer ส่วน avg_pressure เป็น float\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"avg_pressure\" or r._field == \"duration_min\")\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) }))\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {weighted: 0.0, minutes: 0.0},\n       fn: (r, accumulator) => ({\n         weighted: accumulator.weighted + r.avg_pressure * r.duration_min,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0.0 then r.weighted / r.minutes else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        },
+        {
+          "refId": "B",
+          "query": "// ถ่วงน้ำหนักด้วยนาที: sum(ค่าเฉลี่ย x นาที) / sum(นาที)\n// ไม่งั้น session 15 นาทีตอนตี 5 จะดึงค่าทั้งคืนไปเท่ากับ session 5 ชั่วโมง\n// float() ต้องมาก่อน pivot เพราะ duration_min เป็น integer ส่วน avg_leak เป็น float\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"avg_leak\" or r._field == \"duration_min\")\n  |> map(fn: (r) => ({ r with _value: float(v: r._value) }))\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {weighted: 0.0, minutes: 0.0},\n       fn: (r, accumulator) => ({\n         weighted: accumulator.weighted + r.avg_leak * r.duration_min,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0.0 then r.weighted / r.minutes else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "แยกชนิดเหตุการณ์ รายคืน (ครั้ง/ชั่วโมง)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pap-influx"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "OAI (อุดกั้น)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HI (หายใจแผ่ว)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CAI (ส่วนกลาง)"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"oai_total\" or r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {events: 0, minutes: 0},\n       fn: (r, accumulator) => ({\n         events: accumulator.events + r.oai_total,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0 then float(v: r.events) / float(v: r.minutes) * 60.0 else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"hi_total\" or r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {events: 0, minutes: 0},\n       fn: (r, accumulator) => ({\n         events: accumulator.events + r.hi_total,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0 then float(v: r.events) / float(v: r.minutes) * 60.0 else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        },
+        {
+          "refId": "C",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"cai_total\" or r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> reduce(identity: {events: 0, minutes: 0},\n       fn: (r, accumulator) => ({\n         events: accumulator.events + r.cai_total,\n         minutes: accumulator.minutes + r.duration_min }))\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"),\n       _value: if r.minutes > 0 then float(v: r.events) / float(v: r.minutes) * 60.0 else 0.0 }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
+        }
+      ]
+    }
+  ]
+}

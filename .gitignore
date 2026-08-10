@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Real device data: contains the machine serial and health data. Never commit.
+*.bys
+*.BYS
+tests/fixtures/*
+!tests/fixtures/.gitkeep
+
+# --- agent team: artifact ระหว่างทาง ไม่ใช่ deliverable ---
+# agent/command definition ยัง track ไว้ (เป็น context ของ repo)
+.claude/settings.local.json
+.claude/shared/plan-*.md
+.claude/shared/tasks/*
+.claude/shared/done/*
+.claude/shared/review/*
+!.claude/shared/tasks/.gitkeep
+!.claude/shared/done/.gitkeep
+!.claude/shared/review/.gitkeep
+team.conf

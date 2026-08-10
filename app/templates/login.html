@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}เข้าสู่ระบบ — Yuwell PAP Logger{% endblock %}
+
+{% block content %}
+<div class="card login-card">
+  <h1>Yuwell PAP Logger</h1>
+
+  {% if error %}
+  <p class="error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <label for="username">ชื่อผู้ใช้</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+
+    <label for="password">รหัสผ่าน</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+    <button type="submit" class="primary">เข้าสู่ระบบ</button>
+  </form>
+
+  <p class="hint">
+    บัญชีสร้างผ่านบรรทัดคำสั่งเท่านั้น:
+    <code>python -m app.cli adduser &lt;ชื่อ&gt;</code>
+  </p>
+</div>
+{% endblock %}

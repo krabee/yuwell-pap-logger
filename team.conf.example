@@ -1,0 +1,20 @@
+# team.conf — ค่าเฉพาะโปรเจกต์ของทีม agent (yuwell-pap-logger)
+#
+# คัดลอกเป็น team.conf แล้วแก้ตามเครื่องคุณ:  cp team.conf.example team.conf
+# ทั้ง orchestrator.sh และ dispatch.sh อ่านไฟล์นี้ — ไม่ต้องแก้ตัวสคริปต์
+
+SESSION="yuwell-pap-team"
+WINDOW="team"
+
+# ---- นิยาม role ----
+# index 0 ต้องเป็น planner เสมอ · ทั้ง 3 อาเรย์ต้องยาวเท่ากันและเรียงตรงกัน
+#
+# ไม่แยก frontend/backend เพราะงานรอบนี้เล็กเกินกว่าจะคุ้มกับ overhead การประสาน
+# และ PROMPTING.md §6 ("หนึ่งไฟล์ = หนึ่งเจ้าของต่อรอบ") จะบังคับให้ต้องแบ่งรอบอยู่ดี
+ROLES=(planner  engineer  qa      docs    reviewer)
+MODELS=(opus    sonnet    sonnet  sonnet  opus)
+TITLES=(planner engineer  qa      docs    reviewer)
+
+PLANNER_PANE_INDEX=4
+
+BOOTSTRAP_TEMPLATE="อ่าน .claude/agents/{ROLE}.md ทั้งไฟล์ แล้วรับบทบาทเป็น {ROLE} ของทีมนี้ตั้งแต่นี้เป็นต้นไปตลอด session ทำตาม workflow และข้อจำกัดในไฟล์นั้นทุกประการ"

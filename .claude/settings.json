@@ -1,0 +1,45 @@
+{
+  "_comment": "Allow-list สำหรับทีม agent — ใส่เฉพาะคำสั่งที่อ่านอย่างเดียวหรือย้อนกลับได้ ห้ามใส่ docker compose up/down, git push, หรืออะไรที่แตะ Influx ที่มีข้อมูลจริง",
+  "permissions": {
+    "allow": [
+      "Bash(.claude/shared/dispatch.sh *)",
+      "Bash(./.claude/shared/dispatch.sh *)",
+      "Bash(./orchestrator.sh)",
+      "Bash(tmux ls *)",
+      "Bash(tmux list-panes *)",
+      "Bash(tmux list-windows *)",
+      "Bash(tmux capture-pane *)",
+
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git ls-files *)",
+      "Bash(git add *)",
+
+      "Bash(uv run *)",
+      "Bash(uv sync *)",
+      "Bash(uv lock *)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(python3 -m pytest *)",
+
+      "Bash(docker compose config *)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+
+      "Bash(rg *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(xxd *)",
+      "Bash(sha256sum *)",
+      "Bash(jq *)"
+    ]
+  }
+}

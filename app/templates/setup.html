@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}ตั้งค่าครั้งแรก — Yuwell PAP Logger{% endblock %}
+
+{% block content %}
+<div class="card login-card">
+  <h1>ตั้งค่าครั้งแรก</h1>
+  <p class="hint">
+    ระบบนี้ยังไม่มีบัญชีผู้ใช้ สร้างบัญชีแรกเพื่อเริ่มใช้งาน — บัญชีนี้จะเป็นผู้ดูแลระบบ
+  </p>
+
+  {% if error %}
+  <p class="error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <form method="post" action="/setup">
+    <label for="setup_token">Setup token</label>
+    <input id="setup_token" name="setup_token" required autofocus autocomplete="off"
+           spellcheck="false">
+    <p class="hint token-hint">
+      หาได้จาก log ของคอนเทนเนอร์ตอนสตาร์ต:<br>
+      <code>docker compose logs app | grep -A4 "setup token"</code><br>
+      โทเคนจะเปลี่ยนใหม่ทุกครั้งที่รีสตาร์ต
+    </p>
+
+    <label for="username">ชื่อผู้ใช้</label>
+    <input id="username" name="username" autocomplete="username" required>
+
+    <label for="password">รหัสผ่าน</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required
+           minlength="8">
+
+    <label for="password_repeat">รหัสผ่านอีกครั้ง</label>
+    <input id="password_repeat" name="password_repeat" type="password"
+           autocomplete="new-password" required minlength="8">
+
+    <button type="submit" class="primary">สร้างบัญชีและเข้าใช้งาน</button>
+  </form>
+
+  <p class="hint">
+    ถ้าเข้าถึง log ไม่ได้ สร้างบัญชีจากบรรทัดคำสั่งแทนได้:
+    <code>docker compose exec app python -m app.cli adduser &lt;ชื่อ&gt;</code>
+  </p>
+</div>
+{% endblock %}

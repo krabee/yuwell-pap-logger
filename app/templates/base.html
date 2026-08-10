@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Yuwell PAP Logger{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  {% if user %}
+  <header class="topbar">
+    <a class="brand" href="/">Yuwell PAP Logger</a>
+    <nav>
+      <a href="/">อัปโหลด</a>
+      <a href="/sessions">Session</a>
+      <a href="{{ grafana_url }}" target="_blank" rel="noopener">กราฟ (Grafana) ↗</a>
+    </nav>
+    <form method="post" action="/logout" class="logout">
+      <span class="who">{{ user.username }}</span>
+      <button type="submit">ออกจากระบบ</button>
+    </form>
+  </header>
+  {% endif %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <p>
+      รูปแบบไฟล์ <code>.BYS</code> อ้างอิงเอกสารจาก
+      <a href="https://github.com/Centurix/djmed" target="_blank" rel="noopener">Centurix/djmed</a>
+      โดย Chris Read — parser ในโปรเจกต์นี้เขียนขึ้นใหม่จากเอกสารดังกล่าว
+    </p>
+    <p class="disclaimer">
+      เครื่องมือนี้ไม่ใช่อุปกรณ์การแพทย์ และรูปแบบไฟล์มาจากการ reverse engineering
+      <strong>ห้ามใช้เพื่อการวินิจฉัยหรือตัดสินใจเรื่องการรักษา</strong>
+    </p>
+  </footer>
+</body>
+</html>
