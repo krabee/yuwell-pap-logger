@@ -29,55 +29,6 @@
         "includeAll": false,
         "multi": false,
         "current": {}
-      },
-      {
-        "name": "awake_gap",
-        "label": "นับเป็นการตื่นเมื่อหยุดเครื่องนานกว่า (นาที)",
-        "type": "custom",
-        "query": "2,5,10,15,20,30,60",
-        "options": [
-          {
-            "text": "2",
-            "value": "2",
-            "selected": false
-          },
-          {
-            "text": "5",
-            "value": "5",
-            "selected": false
-          },
-          {
-            "text": "10",
-            "value": "10",
-            "selected": true
-          },
-          {
-            "text": "15",
-            "value": "15",
-            "selected": false
-          },
-          {
-            "text": "20",
-            "value": "20",
-            "selected": false
-          },
-          {
-            "text": "30",
-            "value": "30",
-            "selected": false
-          },
-          {
-            "text": "60",
-            "value": "60",
-            "selected": false
-          }
-        ],
-        "current": {
-          "text": "10",
-          "value": "10"
-        },
-        "includeAll": false,
-        "multi": false
       }
     ]
   },
@@ -93,7 +44,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "ทุกตัวเลขบนหน้านี้ **รวมทุก session ที่อยู่ในคืนเดียวกัน** — เครื่องสร้างไฟล์ใหม่ทุกครั้งที่เปิดใช้ ดังนั้นคืนหนึ่งมักมี 2–4 session · **จำนวนครั้งที่ตื่น** ประมาณจากช่วงที่เครื่องหยุดทำงาน นานกว่าเกณฑ์ที่เลือกไว้ด้านบน ไม่ใช่การวัดการตื่นทางการแพทย์ และจับไม่ได้ถ้าถอดหน้ากากโดยไม่ปิดเครื่อง · เกณฑ์อ้างอิง AHI ที่ใช้ระบายสี: 0–4 / 5–14 / 15–29 / 30+ · **ไม่ใช่อุปกรณ์การแพทย์ ห้ามใช้เพื่อการวินิจฉัย** ปรึกษาแพทย์ก่อนเปลี่ยนแปลงการรักษาเสมอ · รูปแบบไฟล์อ้างอิงจาก [Centurix/djmed](https://github.com/Centurix/djmed)"
+        "content": "ทุกตัวเลขบนหน้านี้ **รวมทุก session ที่อยู่ในคืนเดียวกัน** — เครื่องสร้างไฟล์ใหม่ทุกครั้งที่เปิดใช้ ดังนั้นคืนหนึ่งมักมี 2–4 session · เกณฑ์อ้างอิง AHI ที่ใช้ระบายสี: 0–4 / 5–14 / 15–29 / 30+ · **ไม่ใช่อุปกรณ์การแพทย์ ห้ามใช้เพื่อการวินิจฉัย** ปรึกษาแพทย์ก่อนเปลี่ยนแปลงการรักษาเสมอ · รูปแบบไฟล์อ้างอิงจาก [Centurix/djmed](https://github.com/Centurix/djmed)"
       }
     },
     {
@@ -284,162 +235,6 @@
       ]
     },
     {
-      "type": "stat",
-      "title": "ตื่นเฉลี่ยต่อคืน",
-      "description": "นับจากช่วงที่เครื่องหยุดทำงานนานกว่า $awake_gap นาทีระหว่างคืน — เป็นค่าประมาณจากการที่เครื่องถูกปิด/เปิด ไม่ใช่การวัดการตื่นทางการแพทย์ ถ้าถอดหน้ากากแต่ไม่ปิดเครื่อง จะนับไม่ได้",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "pap-influx"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 6,
-        "x": 0,
-        "y": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "mean"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "none",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "// นับ \"ตื่น\" จากช่องว่างระหว่าง session ที่ยาวกว่าเกณฑ์ $awake_gap นาที\n// reduce เดินทีละแถวตามลำดับเวลา เก็บเวลาสิ้นสุดของ session ก่อนหน้าไว้เทียบกับเวลาเริ่มของอันถัดไป\n// เกณฑ์จำเป็น: ในข้อมูลจริง 81% ของช่องว่างยาวแค่ 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sort(columns: [\"_time\"])\n  |> reduce(\n      identity: {prevEnd: 0, awakenings: 0, offMinutes: 0.0, started: false},\n      fn: (r, accumulator) => {\n        startNs = int(v: r._time)\n        endNs = startNs + int(v: r._value) * 60000000000\n        gapMin = if accumulator.started then float(v: startNs - accumulator.prevEnd) / 60000000000.0 else 0.0\n        counts = gapMin >= float(v: ${awake_gap})\n        return {\n          prevEnd: endNs,\n          started: true,\n          awakenings: accumulator.awakenings + (if counts then 1 else 0),\n          offMinutes: accumulator.offMinutes + (if counts then gapMin else 0.0)\n        }\n      })\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r.awakenings) }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "จำนวนครั้งที่ตื่น รายคืน",
-      "description": "ช่องว่างระหว่าง session ที่ยาวกว่า $awake_gap นาที — ปรับเกณฑ์ได้ที่ตัวเลือกด้านบนของหน้า",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "pap-influx"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 9,
-        "x": 6,
-        "y": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "decimals": 0,
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 70,
-            "lineWidth": 1
-          },
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "red"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "ครั้งที่ตื่น"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "// นับ \"ตื่น\" จากช่องว่างระหว่าง session ที่ยาวกว่าเกณฑ์ $awake_gap นาที\n// reduce เดินทีละแถวตามลำดับเวลา เก็บเวลาสิ้นสุดของ session ก่อนหน้าไว้เทียบกับเวลาเริ่มของอันถัดไป\n// เกณฑ์จำเป็น: ในข้อมูลจริง 81% ของช่องว่างยาวแค่ 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sort(columns: [\"_time\"])\n  |> reduce(\n      identity: {prevEnd: 0, awakenings: 0, offMinutes: 0.0, started: false},\n      fn: (r, accumulator) => {\n        startNs = int(v: r._time)\n        endNs = startNs + int(v: r._value) * 60000000000\n        gapMin = if accumulator.started then float(v: startNs - accumulator.prevEnd) / 60000000000.0 else 0.0\n        counts = gapMin >= float(v: ${awake_gap})\n        return {\n          prevEnd: endNs,\n          started: true,\n          awakenings: accumulator.awakenings + (if counts then 1 else 0),\n          offMinutes: accumulator.offMinutes + (if counts then gapMin else 0.0)\n        }\n      })\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: float(v: r.awakenings) }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
-        }
-      ]
-    },
-    {
-      "type": "timeseries",
-      "title": "เวลาที่ตื่นรวม รายคืน",
-      "description": "ผลรวมของช่องว่างที่นับเป็นการตื่น (ยาวกว่า $awake_gap นาที) — คืนที่ไม่มีแท่งคือคืนที่ไม่ได้หยุดเครื่องนานขนาดนั้นเลย",
-      "datasource": {
-        "type": "influxdb",
-        "uid": "pap-influx"
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 9,
-        "x": 15,
-        "y": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "m",
-          "decimals": 0,
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 70,
-            "lineWidth": 1
-          },
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "yellow"
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "นาทีที่ตื่น"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "query": "// นับ \"ตื่น\" จากช่องว่างระหว่าง session ที่ยาวกว่าเกณฑ์ $awake_gap นาที\n// reduce เดินทีละแถวตามลำดับเวลา เก็บเวลาสิ้นสุดของ session ก่อนหน้าไว้เทียบกับเวลาเริ่มของอันถัดไป\n// เกณฑ์จำเป็น: ในข้อมูลจริง 81% ของช่องว่างยาวแค่ 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น\nfrom(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pap_session\")\n  |> filter(fn: (r) => r.user == \"${user}\")\n  |> filter(fn: (r) => r._field == \"duration_min\")\n  |> group(columns: [\"night_date\"])\n  |> sort(columns: [\"_time\"])\n  |> reduce(\n      identity: {prevEnd: 0, awakenings: 0, offMinutes: 0.0, started: false},\n      fn: (r, accumulator) => {\n        startNs = int(v: r._time)\n        endNs = startNs + int(v: r._value) * 60000000000\n        gapMin = if accumulator.started then float(v: startNs - accumulator.prevEnd) / 60000000000.0 else 0.0\n        counts = gapMin >= float(v: ${awake_gap})\n        return {\n          prevEnd: endNs,\n          started: true,\n          awakenings: accumulator.awakenings + (if counts then 1 else 0),\n          offMinutes: accumulator.offMinutes + (if counts then gapMin else 0.0)\n        }\n      })\n  |> map(fn: (r) => ({ _time: time(v: r.night_date + \"T12:00:00Z\"), _value: r.offMinutes }))\n  |> group()\n  |> sort(columns: [\"_time\"])"
-        }
-      ]
-    },
-    {
       "type": "timeseries",
       "title": "AHI รายคืน",
       "description": "หนึ่งจุดต่อหนึ่งคืน (รวมทุก session ในคืนนั้น) พร้อมเส้นค่าเฉลี่ยเคลื่อนที่ 7 คืน",
@@ -451,7 +246,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 8
       },
       "fieldConfig": {
         "defaults": {
@@ -562,7 +357,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 18
       },
       "fieldConfig": {
         "defaults": {
@@ -627,7 +422,7 @@
     {
       "type": "timeseries",
       "title": "จำนวน session ต่อคืน",
-      "description": "จำนวนไฟล์ที่เครื่องเขียนในคืนนั้น — **ไม่ใช่จำนวนครั้งที่ตื่น** ช่องว่างส่วนใหญ่ระหว่าง session ยาวเพียง 1-5 นาที ซึ่งสั้นเกินกว่าจะเป็นการตื่น ดูจำนวนครั้งที่ตื่นจาก panel ด้านบนที่มีเกณฑ์เวลากำกับ",
+      "description": "จำนวนไฟล์ที่เครื่องเขียนในคืนนั้น — เครื่องขึ้นไฟล์ใหม่ทุกครั้งที่เริ่มทำงาน จึงสะท้อนจำนวนครั้งที่หยุดแล้วเปิดเครื่องใหม่ระหว่างคืน",
       "datasource": {
         "type": "influxdb",
         "uid": "pap-influx"
@@ -636,7 +431,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 18
       },
       "fieldConfig": {
         "defaults": {
@@ -695,7 +490,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 27
       },
       "fieldConfig": {
         "defaults": {
@@ -773,7 +568,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 36
       },
       "fieldConfig": {
         "defaults": {
