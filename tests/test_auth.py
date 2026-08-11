@@ -10,6 +10,7 @@ reads settings at import time to configure the session cookie.
 from __future__ import annotations
 
 import importlib
+import re
 from datetime import datetime
 
 import pytest
@@ -358,6 +359,104 @@ class TestPerAccountIsolation:
         assert "YH550A-AAAAAAAAA" not in bob_page, (
             "alice's machine serial leaked into bob's session list"
         )
+
+    def _import_many(self, client, username, serial, count):
+        from app.auth import get_user_by_name
+        from app.db import Upload
+        from datetime import timedelta, timezone
+
+        with client.app.state.db_factory() as db:
+            user = get_user_by_name(db, username)
+            base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            for i in range(count):
+                start = base + timedelta(hours=i * 8)
+                db.add(
+                    Upload(
+                        user_id=user.id,
+                        file_sha256=f"hash-{i:05d}",
+                        filename=f"{i:08d}.BYS",
+                        serial=serial,
+                        model="YH550",
+                        session_id=f"s{i}",
+                        session_start=start,
+                        night_date=(start - timedelta(hours=12)).date().isoformat(),
+                        duration_minutes=120,
+                        ahi=1.0,
+                        avg_pressure=8.0,
+                        p90_pressure=9.0,
+                        avg_leak=0.5,
+                        points_written=121,
+                    )
+                )
+            db.commit()
+
+    def test_every_session_is_reachable_through_paging(self, client):
+        """The page used to cap at 500 rows with no way further back, so a third of
+        one user's history simply could not be opened. Every row must be reachable."""
+        add_user(client, "alice")
+        self._import_many(client, "alice", "YH550A-AAAAAAAAA", 120)
+        sign_in(client, "alice")
+
+        seen = set()
+        page = 1
+        while page <= 20:  # guard against a paging loop
+            body = client.get(f"/sessions?page={page}").text
+            found = set(re.findall(r"(\d{8})\.BYS", body))
+            assert found, f"page {page} rendered no session rows"
+            seen |= found
+            if 'href="/sessions?page=%d"' % (page + 1) not in body:
+                break
+            page += 1
+
+        assert len(seen) == 120, (
+            f"only {len(seen)} of 120 sessions were reachable by paging to the end"
+        )
+
+    def test_first_page_shows_the_newest_sessions(self, client):
+        add_user(client, "alice")
+        self._import_many(client, "alice", "YH550A-AAAAAAAAA", 120)
+        sign_in(client, "alice")
+
+        body = client.get("/sessions").text
+
+        assert "00000119.BYS" in body, "newest session is not on the first page"
+        assert "00000000.BYS" not in body, "oldest session should not be on page 1"
+        assert "1–50 จาก 120" in body, f"range label missing or wrong"
+
+    def test_out_of_range_pages_are_clamped_not_broken(self, client):
+        """Bookmarked page numbers go stale the moment new sessions arrive."""
+        add_user(client, "alice")
+        self._import_many(client, "alice", "YH550A-AAAAAAAAA", 120)
+        sign_in(client, "alice")
+
+        assert client.get("/sessions?page=999").status_code == 200
+        assert client.get("/sessions?page=0").status_code == 200
+        assert client.get("/sessions?page=-5").status_code == 200
+        assert "00000119.BYS" in client.get("/sessions?page=-5").text, (
+            "a page below 1 should clamp to the first page"
+        )
+
+    def test_times_are_shown_in_the_machines_timezone(self, client):
+        """Stored UTC, displayed as the machine showed it.
+
+        A session recorded at 02:38 on the device must read 02:38 on the page. Showing
+        the raw UTC 19:38 would put it on the wrong evening and contradict the
+        night_date beside it.
+        """
+        add_user(client, "alice")
+        # 02:38 Bangkok on 10 Aug is 19:38 UTC on 9 Aug.
+        self._import_night(
+            client, "alice", "YH550A-AAAAAAAAA", datetime(2026, 8, 10, 2, 38, 0)
+        )
+
+        sign_in(client, "alice")
+        page = client.get("/sessions").text
+
+        assert "2026-08-10 02:38" in page, (
+            "session start is not rendered in the device timezone; UTC would show 19:38"
+        )
+        assert "19:38" not in page, "raw UTC leaked into the page"
+        assert "Asia/Bangkok" in page, "the page does not say which timezone it is using"
 
     def test_nights_and_sessions_are_counted_separately(self, client):
         """The machine writes a file per power-on, so a night is usually several

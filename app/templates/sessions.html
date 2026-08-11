@@ -16,14 +16,15 @@
 <p class="hint">
   เครื่องสร้างไฟล์ใหม่ทุกครั้งที่เปิดใช้ คืนหนึ่งจึงมักมีหลาย session — ตัวเลขด้านบนรวมให้แล้ว
   โดย AHI ถ่วงน้ำหนักตามความยาวของแต่ละ session<br>
-  แสดง {{ uploads|length }} รายการล่าสุด — ดูกราฟรายนาทีและแนวโน้มระยะยาวได้ที่
+  เวลาแสดงตามโซนเวลาของเครื่อง (<code>{{ device_tz }}</code>) ซึ่งตรงกับที่หน้าจอเครื่องแสดงจริง<br>
+  ดูกราฟรายนาทีและแนวโน้มระยะยาวได้ที่
   <a href="{{ grafana_url }}" target="_blank" rel="noopener">Grafana ↗</a>
 </p>
 
 <table class="sessions">
   <thead>
     <tr>
-      <th>คืนของวันที่</th><th>เริ่ม (UTC)</th><th>นาที</th>
+      <th>คืนของวันที่</th><th>เริ่ม</th><th>จบ</th><th>นาที</th>
       <th>AHI</th><th>แรงดันเฉลี่ย</th><th>P90</th><th>รั่วเฉลี่ย</th>
       <th>เครื่อง</th><th>ไฟล์</th>
     </tr>
@@ -32,7 +33,8 @@
     {% for u in uploads %}
     <tr>
       <td>{{ u.night_date }}</td>
-      <td>{{ u.session_start.strftime("%Y-%m-%d %H:%M") }}</td>
+      <td>{{ u.session_start | devicetime }}</td>
+      <td>{{ (u.session_start + timedelta(minutes=u.duration_minutes)) | devicetime("%H:%M") }}</td>
       <td>{{ u.duration_minutes }}</td>
       <td>{{ "%.1f"|format(u.ahi) }}</td>
       <td>{{ "%.1f"|format(u.avg_pressure) }}</td>
@@ -46,6 +48,29 @@
     {% endfor %}
   </tbody>
 </table>
+
+<nav class="pager" aria-label="แบ่งหน้า">
+  <span class="pager-range">
+    แถว {{ page_first_row }}–{{ page_last_row }} จาก {{ total_rows }}
+    &middot; หน้า {{ page }} จาก {{ last_page }}
+  </span>
+  <span class="pager-links">
+    {% if page > 1 %}
+      <a href="/sessions?page=1">&laquo; ล่าสุด</a>
+      <a href="/sessions?page={{ page - 1 }}">&lsaquo; ก่อนหน้า</a>
+    {% else %}
+      <span class="disabled">&laquo; ล่าสุด</span>
+      <span class="disabled">&lsaquo; ก่อนหน้า</span>
+    {% endif %}
+    {% if page < last_page %}
+      <a href="/sessions?page={{ page + 1 }}">ถัดไป &rsaquo;</a>
+      <a href="/sessions?page={{ last_page }}">เก่าสุด &raquo;</a>
+    {% else %}
+      <span class="disabled">ถัดไป &rsaquo;</span>
+      <span class="disabled">เก่าสุด &raquo;</span>
+    {% endif %}
+  </span>
+</nav>
 {% else %}
 <div class="card">
   <p>ยังไม่มีข้อมูล — <a href="/">อัปโหลดไฟล์จาก SD card</a> เพื่อเริ่มต้น</p>

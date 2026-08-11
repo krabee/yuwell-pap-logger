@@ -10,6 +10,8 @@ import json
 import logging
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from math import ceil
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -39,10 +41,30 @@ log = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+
+def device_localtime(value: datetime, fmt: str = "%Y-%m-%d %H:%M") -> str:
+    """Render a stored timestamp in the machine's own timezone.
+
+    Everything is stored in UTC, but the number a user wants to see is the one the
+    machine displayed at the time. SQLite hands back naive datetimes and Postgres
+    hands back aware ones, so normalise before converting.
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(get_settings().device_zoneinfo).strftime(fmt)
+
+
+templates.env.filters["devicetime"] = device_localtime
+templates.env.globals["timedelta"] = timedelta
+
 # Endpoints reachable without an account. Everything else requires current_user.
 PUBLIC_PATHS = {"/login", "/setup", "/health", "/favicon.ico"}
 
 MIN_PASSWORD_LENGTH = 8
+
+# Rows per page on /sessions. The page was previously capped at 500 with no way to
+# reach anything older, which quietly hid a third of one user's history.
+PAGE_SIZE = 50
 
 
 def _issue_setup_token(app: FastAPI) -> None:
@@ -254,16 +276,27 @@ async def upload_page(request: Request):
 
 
 @app.get("/sessions", response_class=HTMLResponse)
-async def sessions_page(request: Request):
+async def sessions_page(request: Request, page: int = 1):
     user = current_user(request)
     db = request.state.db
+
+    total_rows = db.execute(
+        select(func.count(Upload.id)).where(Upload.user_id == user.id)
+    ).scalar_one()
+
+    # Clamp rather than 404: a bookmarked page number goes stale as soon as new
+    # sessions arrive and shift everything down.
+    last_page = max(1, ceil(total_rows / PAGE_SIZE))
+    page = max(1, min(page, last_page))
+    offset = (page - 1) * PAGE_SIZE
 
     rows = (
         db.execute(
             select(Upload)
             .where(Upload.user_id == user.id)
             .order_by(Upload.session_start.desc())
-            .limit(500)
+            .offset(offset)
+            .limit(PAGE_SIZE)
         )
         .scalars()
         .all()
@@ -291,7 +324,13 @@ async def sessions_page(request: Request):
         {
             "user": user,
             "grafana_url": request.app.state.settings.grafana_url,
+            "device_tz": request.app.state.settings.device_tz,
             "uploads": rows,
+            "page": page,
+            "last_page": last_page,
+            "page_first_row": offset + 1 if rows else 0,
+            "page_last_row": offset + len(rows),
+            "total_rows": total_rows,
             "total_nights": nights,
             "total_sessions": session_count or 0,
             "total_hours": total_minutes / 60,

@@ -134,6 +134,18 @@ tbody tr.duplicate td { color: var(--muted); }
 
 .sessions { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 
+.pager {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; flex-wrap: wrap; margin-top: 1rem;
+  color: var(--muted); font-size: .9em;
+}
+.pager-links { display: flex; gap: .5rem; flex-wrap: wrap; }
+.pager-links a, .pager-links .disabled {
+  padding: .3rem .7rem; border: 1px solid var(--border);
+  border-radius: var(--radius); text-decoration: none;
+}
+.pager-links .disabled { opacity: .4; }
+
 .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
 .stat {
   background: var(--surface); border: 1px solid var(--border);
