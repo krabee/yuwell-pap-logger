@@ -10,6 +10,7 @@ Keep this in sync with .env.example — the docs role checks that they match.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     # --- app ---
     secret_key: str = "dev-only-insecure-key-change-me"
     app_base_url: str = "http://localhost:8000"
+    log_level: str = "INFO"
 
     # Timezone of the *CPAP machine*, not the server. .BYS files store naive local
     # wall-clock, so this is the only thing that makes their timestamps meaningful.
@@ -31,6 +33,16 @@ class Settings(BaseSettings):
 
     # --- relational store: users, devices, ingest ledger ---
     database_url: str = "sqlite:///./data/app.db"
+
+    # Writable directory for things that belong to this instance rather than to the
+    # image: the SQLite file and the setup token. Mounted as a volume in compose.
+    data_dir: str = "./data"
+
+    # Seed account, applied only while no accounts exist. Setting both lets a
+    # deployment come up ready to sign in to, with no token to copy and no /setup
+    # page. Changing them afterwards does nothing — see the warning in main.py.
+    init_username: str = ""
+    init_password: str = ""
 
     # --- InfluxDB ---
     influx_url: str = "http://influxdb:8086"
@@ -68,6 +80,12 @@ class Settings(BaseSettings):
         """Only mark session cookies Secure when the app is actually served over TLS,
         otherwise a plain-http deployment silently loses its login."""
         return self.app_base_url.lower().startswith("https://")
+
+    @property
+    def setup_token_path(self) -> Path:
+        # Resolved so the log prints a path that can be pasted into a command; inside
+        # the container the working directory is not where the reader is standing.
+        return (Path(self.data_dir) / "setup-token").resolve()
 
     @property
     def max_upload_bytes(self) -> int:

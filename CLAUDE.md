@@ -131,14 +131,29 @@ These are the things that look like improvements and are not.
 - **No job queue.** SSE plus per-file ledger commits was chosen deliberately over
   Celery/RQ and a jobs table. (decided 2026-08-10)
 
-- **Argon2 for passwords.** The **first** account is created at `/setup`, gated on two
-  things checked together on every POST: the instance has zero accounts, and the
-  caller supplies the setup token printed to the log at startup. The token lives only
-  in `app.state`, is discarded the moment the first account exists, and is not issued
-  at all when accounts already exist — otherwise a restart of a working instance would
-  hand out a way to mint a new admin. Later accounts come from the CLI; there is no
-  open sign-up. Both gates are covered by `TestFirstRunSetup` and were mutation-tested.
-  (added 2026-08-10)
+- **Argon2 for passwords.** The first account arrives one of two ways, decided once
+  per boot in `_bootstrap_access` and only ever while the instance has zero accounts:
+
+  1. `INIT_USERNAME` + `INIT_PASSWORD` in the environment seed an admin at startup —
+     no token, no `/setup`. **One-time only**: a later boot never updates or
+     duplicates the account, because doing so would silently undo a password set with
+     `app.cli passwd`. When the values go stale the app says so in the log rather than
+     letting `.env` read as the current password. Leaving them in place is deliberate
+     — if the database volume is lost while InfluxDB still holds the therapy data, the
+     instance comes back owned instead of open to whoever reaches the port first.
+  2. Otherwise a setup token is generated, stored at `DATA_DIR/setup-token` and
+     printed to the log. It survives restarts (regenerating per boot meant the value
+     scrolled away) and is deleted the moment an account exists.
+
+  `/setup` re-checks both gates on every POST. Later accounts come from the CLI; there
+  is no open sign-up. Covered by `TestInitAccountFromEnv`, `TestSetupTokenFile` and
+  `TestFirstRunSetup`, all mutation-tested. (added 2026-08-10, reworked 2026-08-12)
+
+- **The app configures its own logging.** uvicorn sets up only its own loggers and
+  leaves the root logger at WARNING, so `log.info` from this package goes nowhere.
+  That hid the line naming the account just created — the single most important
+  message in the first-run flow. `logging.basicConfig` at import of `app.main` fixes
+  it; `LOG_LEVEL` controls it. (found 2026-08-12)
 
 - **Uploaded archives are untrusted.** `extract_bys_from_zip` checks entry names,
   entry count and total expanded size before reading anything.
@@ -178,6 +193,12 @@ every structural test still passes.
 When adding a test file, add it to the table in `.claude/agents/qa.md` in the **same**
 round, with the reason it must not be deleted. Skipping that is how the role files
 drift out of date.
+
+Tests must never inherit the repository's `.env`. pydantic-settings resolves it
+relative to the working directory, so the fixtures `monkeypatch.chdir(tmp_path)`.
+This was not theoretical: adding `INIT_USERNAME` to a developer's own `.env` made
+eleven tests fail with nothing wrong in the code under test.
+`test_the_suite_does_not_inherit_the_repositorys_env_file` guards it.
 
 ## Agent team
 

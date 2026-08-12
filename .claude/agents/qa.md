@@ -24,6 +24,8 @@ model: sonnet
   | `tests/test_metrics.py` | สูตร AHI และ P90/P95 ถ้าลบ ตัวเลขที่ผู้ใช้เอาไปตัดสินใจจะเพี้ยนเงียบ ๆ |
   | `tests/test_ingest.py` | dedupe ด้วย sha256, zip slip/bomb guard, การ skip ไฟล์ซ้ำ |
   | `tests/test_auth.py` | การแยกผู้ใช้ — ถ้าลบ ข้อมูลสุขภาพคนหนึ่งอาจโผล่ให้อีกคนเห็น |
+  | ↳ `TestInitAccountFromEnv` + `TestSetupTokenFile` | เส้นทางสร้างบัญชีแรก **ห้ามลบ** — ต้องมีเคส "seed จาก `INIT_*` ครั้งเดียวเท่านั้น" (บูตซ้ำห้ามสร้างซ้ำหรือรีเซ็ตรหัส เพราะจะไปล้างรหัสที่ตั้งด้วย `app.cli passwd` เงียบ ๆ), "รหัสสั้นกว่า 8 ตัวห้ามสร้าง", "token คงเดิมข้ามรีสตาร์ต", "ไฟล์ token ถูกลบหลังใช้" (2026-08-12) |
+  | ↳ `test_the_suite_does_not_inherit_the_repositorys_env_file` | **ห้ามลบ** — เทสต์เคยอ่าน `.env` จริงของเครื่องนักพัฒนา พอ `.env` มี `INIT_USERNAME` เทสต์ 11 ตัวแดงทั้งที่โค้ดไม่ผิด · fixture ต้อง `monkeypatch.chdir(tmp_path)` เสมอ (2026-08-12) |
   | ↳ คลาส `TestFirstRunSetup` ในไฟล์เดียวกัน | ด่าน `/setup` **ห้ามลบ** — ถ้าด่านใดด่านหนึ่ง (นับ user == 0 / setup token) fail open ใครก็ยึดระบบเป็น admin ได้ ต้องมีเคส "token ผิด", "มี user แล้วห้ามสร้าง", "สร้างเสร็จแล้วปิดถาวร", "รีสตาร์ตแล้วห้ามออก token ใหม่" (2026-08-10) |
   | ↳ `test_nights_and_sessions_are_counted_separately` + `test_average_ahi_is_weighted_by_session_length` | คืน ≠ session (ข้อมูลจริงวัดได้ 2–4 session ต่อคืน) ถ้าลบ ตัวเลข "ต่อคืน" จะกลับไปรายงานค่าต่อ session ซึ่งต่ำกว่าความจริง ~2.5 เท่า และ AHI จะกลับไปเฉลี่ยแบบไม่ถ่วงน้ำหนัก (2026-08-10) |
 

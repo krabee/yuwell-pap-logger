@@ -22,6 +22,10 @@ from tests.test_ingest import FakeWriter
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    # pydantic-settings looks for .env relative to the working directory, so running
+    # the suite from the repository root would pull in the developer's own settings.
+    # A value like INIT_USERNAME there silently changes what the app does at boot.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'web.db'}")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-the-suite")
     monkeypatch.setenv("APP_BASE_URL", "http://testserver")
@@ -58,6 +62,286 @@ def sign_in(client, username: str, password: str = "correct-horse-battery"):
         data={"username": username, "password": password, "next": "/"},
         follow_redirects=False,
     )
+
+
+def boot_app(tmp_path, monkeypatch, db_name="web.db", **extra_env):
+    """Start the app against a given database with a given environment.
+
+    Returned as a context manager so a test can boot the same database twice and
+    observe what changes between runs.
+    """
+    import importlib
+
+    # See the note in the `client` fixture: never inherit the repository's .env.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / db_name}")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-the-suite")
+    monkeypatch.setenv("APP_BASE_URL", "http://testserver")
+    monkeypatch.setenv("DEVICE_TZ", "Asia/Bangkok")
+    monkeypatch.setenv("INFLUX_URL", "http://localhost:0")
+    monkeypatch.setenv("INFLUX_TOKEN", "test-token")
+    for key, value in extra_env.items():
+        monkeypatch.setenv(key, value)
+
+    import app.config
+
+    app.config.get_settings.cache_clear()
+    import app.main
+
+    importlib.reload(app.main)
+    return app.main.app
+
+
+def test_the_suite_does_not_inherit_the_repositorys_env_file(tmp_path, monkeypatch):
+    """Regression guard for a real failure.
+
+    The suite used to read whatever .env sat in the repository root. It looked fine
+    for months, then INIT_USERNAME was added to that file and eleven tests started
+    booting an app that already had an account — failures with nothing wrong in the
+    code under test.
+    """
+    monkeypatch.chdir(tmp_path)
+    for key in ("INIT_USERNAME", "INIT_PASSWORD", "DEVICE_TZ", "SECRET_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
+    import app.config
+
+    app.config.get_settings.cache_clear()
+    settings = app.config.Settings()
+
+    assert settings.init_username == "", (
+        "a value leaked in from a .env outside the test's own directory"
+    )
+    assert settings.init_password == ""
+    app.config.get_settings.cache_clear()
+
+
+class TestInitAccountFromEnv:
+    """INIT_USERNAME/INIT_PASSWORD seed the first account so no token is needed.
+
+    Do not delete: the seeding must happen only while the instance has no accounts.
+    If it ever started applying to a running instance it would silently reset or
+    duplicate a real account, and a stale value in .env would become a live password.
+    """
+
+    CREDS = {"INIT_USERNAME": "owner", "INIT_PASSWORD": "correct-horse-battery"}
+
+    def test_the_account_is_created_at_boot_and_no_token_is_issued(
+        self, tmp_path, monkeypatch
+    ):
+        application = boot_app(tmp_path, monkeypatch, **self.CREDS)
+
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            assert client.app.state.setup_token is None, (
+                "a setup token was issued even though INIT_* seeded an account"
+            )
+            response = client.post(
+                "/login",
+                data={
+                    "username": "owner",
+                    "password": "correct-horse-battery",
+                    "next": "/",
+                },
+                follow_redirects=False,
+            )
+            assert response.status_code == 303, "the seeded account cannot sign in"
+            assert client.get("/").status_code == 200
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_the_seeded_account_is_an_administrator(self, tmp_path, monkeypatch):
+        application = boot_app(tmp_path, monkeypatch, **self.CREDS)
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            from app.auth import get_user_by_name
+
+            with client.app.state.db_factory() as db:
+                assert get_user_by_name(db, "owner").is_admin
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_setup_page_is_closed_when_the_account_was_seeded(self, tmp_path, monkeypatch):
+        application = boot_app(tmp_path, monkeypatch, **self.CREDS)
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            page = client.get("/setup", follow_redirects=False)
+            assert page.status_code == 303
+            assert page.headers["location"] == "/login"
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_a_second_boot_does_not_create_a_duplicate_or_reset_the_password(
+        self, tmp_path, monkeypatch
+    ):
+        """The seeding is one-time. A changed INIT_PASSWORD must not take effect,
+        because that would silently undo a password set with app.cli passwd."""
+        from app.auth import get_user_by_name
+        from app.db import User
+        from sqlalchemy import select
+
+        application = boot_app(tmp_path, monkeypatch, **self.CREDS)
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            with client.app.state.db_factory() as db:
+                first_hash = get_user_by_name(db, "owner").password_hash
+
+        # Second boot, same database, different password in the environment.
+        application = boot_app(
+            tmp_path,
+            monkeypatch,
+            INIT_USERNAME="owner",
+            INIT_PASSWORD="a-completely-different-password",
+        )
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            with client.app.state.db_factory() as db:
+                users = db.execute(select(User)).scalars().all()
+                assert len(users) == 1, f"boot created a duplicate account: {users}"
+                assert users[0].password_hash == first_hash, (
+                    "the password was reset from the environment on a later boot"
+                )
+
+            # the original password still works
+            assert (
+                client.post(
+                    "/login",
+                    data={
+                        "username": "owner",
+                        "password": "correct-horse-battery",
+                        "next": "/",
+                    },
+                    follow_redirects=False,
+                ).status_code
+                == 303
+            )
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_a_short_password_creates_nothing_and_falls_back_to_the_token(
+        self, tmp_path, monkeypatch
+    ):
+        """Better to make the operator deal with /setup than to stand up an
+        administrator whose password is four characters long."""
+        from app.auth import get_user_by_name
+
+        application = boot_app(
+            tmp_path, monkeypatch, INIT_USERNAME="owner", INIT_PASSWORD="short"
+        )
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            with client.app.state.db_factory() as db:
+                assert get_user_by_name(db, "owner") is None, (
+                    "an account was created with a password below the minimum length"
+                )
+            assert client.app.state.setup_token, "no fallback token was issued"
+            assert client.get("/setup").status_code == 200
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_only_one_of_the_pair_falls_back_to_the_token(self, tmp_path, monkeypatch):
+        application = boot_app(tmp_path, monkeypatch, INIT_USERNAME="owner")
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            from app.auth import get_user_by_name
+
+            with client.app.state.db_factory() as db:
+                assert get_user_by_name(db, "owner") is None
+            assert client.app.state.setup_token
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_seeding_recovers_an_instance_whose_accounts_were_lost(
+        self, tmp_path, monkeypatch
+    ):
+        """The reason to leave INIT_* in .env: if the database volume disappears
+        while InfluxDB still holds the therapy data, the instance comes back owned
+        instead of sitting open for whoever reaches it first."""
+        application = boot_app(tmp_path, monkeypatch, db_name="lost.db", **self.CREDS)
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            assert client.app.state.setup_token is None
+
+        (tmp_path / "lost.db").unlink()  # the volume is gone
+
+        application = boot_app(tmp_path, monkeypatch, db_name="lost.db", **self.CREDS)
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            assert client.app.state.setup_token is None, (
+                "the instance reopened /setup instead of recreating the account"
+            )
+            from app.auth import get_user_by_name
+
+            with client.app.state.db_factory() as db:
+                assert get_user_by_name(db, "owner") is not None
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+
+class TestSetupTokenFile:
+    def test_the_token_survives_a_restart(self, tmp_path, monkeypatch):
+        """Regenerating per boot meant the value scrolled away with the log."""
+        application = boot_app(tmp_path, monkeypatch, db_name="tok.db")
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            first = client.app.state.setup_token
+        assert first
+
+        application = boot_app(tmp_path, monkeypatch, db_name="tok.db")
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            assert client.app.state.setup_token == first, (
+                "a different token was issued on restart"
+            )
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
+
+    def test_the_token_is_written_to_disk_and_removed_once_used(
+        self, tmp_path, monkeypatch
+    ):
+        token_file = tmp_path / "setup-token"
+        application = boot_app(tmp_path, monkeypatch, db_name="tok2.db")
+
+        with TestClient(application) as client:
+            client.app.state.influx = FakeWriter()
+            assert token_file.exists(), "the token was not written where the log says"
+            assert token_file.read_text().strip() == client.app.state.setup_token
+
+            client.post(
+                "/setup",
+                data={
+                    "setup_token": client.app.state.setup_token,
+                    "username": "owner",
+                    "password": "correct-horse-battery",
+                    "password_repeat": "correct-horse-battery",
+                },
+                follow_redirects=False,
+            )
+
+            assert not token_file.exists(), (
+                "the token file outlived the account it was meant to create"
+            )
+
+        import app.config
+
+        app.config.get_settings.cache_clear()
 
 
 class TestFirstRunSetup:
@@ -210,32 +494,23 @@ class TestFirstRunSetup:
 
     def test_no_token_is_issued_when_accounts_already_exist(self, tmp_path, monkeypatch):
         """A running instance must not mint a token that could seize an admin account."""
-        import importlib
-
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'existing.db'}")
-        monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-the-suite")
-        monkeypatch.setenv("INFLUX_URL", "http://localhost:0")
-        monkeypatch.setenv("INFLUX_TOKEN", "test-token")
-
-        import app.config
-
-        app.config.get_settings.cache_clear()
-        import app.main
-
-        importlib.reload(app.main)
+        application = boot_app(tmp_path, monkeypatch, db_name="existing.db")
 
         # First boot: empty, so a token appears and an account is made.
-        with TestClient(app.main.app) as first:
+        with TestClient(application) as first:
             first.app.state.influx = FakeWriter()
             assert first.app.state.setup_token
             add_user(first, "alice")
 
         # Second boot against the same database: the instance is already owned.
-        with TestClient(app.main.app) as second:
+        application = boot_app(tmp_path, monkeypatch, db_name="existing.db")
+        with TestClient(application) as second:
             second.app.state.influx = FakeWriter()
             assert second.app.state.setup_token is None, (
                 "a setup token was issued on an instance that already has accounts"
             )
+
+        import app.config
 
         app.config.get_settings.cache_clear()
 
