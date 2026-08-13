@@ -42,12 +42,25 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-อย่างน้อยต้องแก้ `SECRET_KEY`, `INFLUX_TOKEN`, รหัสผ่านต่าง ๆ และ **ตั้งบัญชีแรกตรงนี้เลย**:
+**ก่อนสั่ง `docker compose up` ต้องสร้าง `SECRET_KEY` ก่อน** — ค่านี้ใช้เซ็น session cookie
+ถ้าเป็นค่าที่อยู่ใน repo สาธารณะ (ว่าง หรือ placeholder เดิม) ใครก็เดา/อ่านค่านั้นแล้วปลอม cookie
+เป็นผู้ใช้คนอื่นเพื่ออ่านข้อมูลสุขภาพได้ทันที — เพราะแบบนั้น**ไม่ตั้งค่านี้ = `docker compose up`
+ไม่ขึ้นเลย** และถ้าใส่ค่า placeholder เดิมเข้าไปตรง ๆ **แอปก็จะปฏิเสธไม่สตาร์ตเช่นกัน**
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+คัดลอกผลลัพธ์ไปใส่ `SECRET_KEY=` ใน `.env` แล้วแก้ `INFLUX_TOKEN` กับรหัสผ่านอื่น ๆ ต่อ และ
+**ตั้งบัญชีแรกตรงนี้เลย**:
 
 ```bash
 INIT_USERNAME=ชื่อที่ใช้ล็อกอิน
 INIT_PASSWORD=รหัสผ่านอย่างน้อย8ตัว
 ```
+
+> **เปลี่ยน `SECRET_KEY` ทีหลัง = ทุกคนถูก logout ทันที** เพราะ session cookie ที่เซ็นด้วยคีย์เก่า
+> จะตรวจสอบไม่ผ่านอีกต่อไป ตั้งครั้งเดียวให้เรียบร้อยแล้วอย่าสุ่มใหม่โดยไม่จำเป็น
 
 ```bash
 docker compose --profile local-influx up -d

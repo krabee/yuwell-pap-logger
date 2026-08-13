@@ -11,6 +11,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      SECRET_KEY: '${SECRET_KEY:?set SECRET_KEY in .env — generate with: python -c "import secrets; print(secrets.token_urlsafe(48))"}'
     ports:
       - "8000:8000"
     volumes:

@@ -33,7 +33,7 @@ from app.auth import (
     user_count,
     verify_password,
 )
-from app.config import get_settings
+from app.config import INSECURE_SECRET_KEYS, get_settings
 from app.db import Upload, create_db_engine, create_session_factory, init_db
 from app.influx import InfluxWriter
 from app.ingest import Ingestor
@@ -205,9 +205,28 @@ def _bootstrap_access(app: FastAPI) -> None:
     )
 
 
+def _require_a_real_secret_key(settings) -> None:
+    """Refuse to boot on a key anyone can read.
+
+    SECRET_KEY signs the session cookie (see the SessionMiddleware setup below). A
+    key that is empty, whitespace, or one of the values this repo has ever shipped as
+    a default is public knowledge — anyone who has seen the source can forge
+    `user_id=1` and read another account's therapy data. Warning and continuing
+    anyway was rejected: a log line nobody reads doesn't stop that.
+    """
+    value = settings.secret_key
+    if not value.strip() or value in INSECURE_SECRET_KEYS:
+        raise RuntimeError(
+            "SECRET_KEY is unset or is a known placeholder value. Generate a real "
+            "one and put it in .env: "
+            'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    _require_a_real_secret_key(settings)
     engine = create_db_engine(settings)
     init_db(engine)
 

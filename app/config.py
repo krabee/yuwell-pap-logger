@@ -16,6 +16,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Both of these have appeared in this public repo at some point — the Settings
+# default and a past .env.example placeholder — so anyone who has ever seen the
+# source knows them. A deployment still running on either one is signing session
+# cookies with a key an attacker can just read; app.main refuses to boot on them.
+INSECURE_SECRET_KEYS: frozenset[str] = frozenset({
+    "dev-only-insecure-key-change-me",
+    "change-me-to-a-long-random-string",
+})
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
