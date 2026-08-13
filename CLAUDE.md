@@ -81,20 +81,22 @@ These are the things that look like improvements and are not.
 - **Trailing all-`0xFF` records are erased flash, not data — discard them.** A session
   the device never finished writing still declares its reserved record count in the
   header, and everything past the last real write reads back as `0xFF`. Taken
-  literally that decodes as 25.5 cmH₂O and 255 events per minute. On the user's own
-  card, one file (`00200126.BYS`, 363 declared / 200 written) produced an AHI of
-  **20,611** before this was handled; after trimming, the computed average pressure
-  matched what the machine itself reported to within 0.05 cmH₂O. `_count_written_records` trims only a
+  literally that decodes as 25.5 cmH₂O and 255 events per minute. On a real card, one
+  file (`00200126.BYS`, 363 declared / 200 written) produced an AHI of **20,611**
+  before this was handled; after trimming, the computed average pressure matched what
+  the machine itself reported to within 0.05 cmH₂O — the cross-check that proves the
+  trim is correct rather than just plausible. `_count_written_records` trims only a
   *trailing* run, plus one torn boundary record — a gap in the middle is left in place
   and warned about, because that would mean something other than an interrupted write.
   (found in real data 2026-08-10)
 
 - **A night is not a session — aggregate before you report.** The machine writes a new
-  file every time it is switched on, so a night is routinely 2–4 sessions (measured on
-  against a real year of data). Anything labelled "per night"
-  must group by the `night_date` tag first. Counting `pap_session` points gives
-  sessions; the first version of the dashboard did that and reported 210 nights in a
-  90-day window, reported more nights than there were calendar days in it, with hours per night understated by roughly 2.5x.
+  file every time it is switched on, so a night is routinely 2–4 sessions (measured
+  against a real year of data). Anything labelled "per night" must group by the
+  `night_date` tag first. Counting `pap_session` points gives sessions instead of
+  nights; the first version of the dashboard did that and, over a 90-day window,
+  reported more nights than there were calendar days in the window, with hours per
+  night understated by roughly 2.5×.
   Averages have the same trap: a 15-minute session must not weigh as much as a
   5-hour one. AHI per night is `sum(events) / sum(minutes) * 60`, and average
   pressure/leak are duration-weighted. On the SQL side,
@@ -157,6 +159,23 @@ These are the things that look like improvements and are not.
 
 - **Uploaded archives are untrusted.** `extract_bys_from_zip` checks entry names,
   entry count and total expanded size before reading anything.
+
+- **`SECRET_KEY` set to a default or placeholder value refuses to boot — it does not
+  just log a warning.** It signs the session cookie; a key this repo has ever shipped
+  (as the `Settings` default or a past `.env.example` placeholder) is public knowledge,
+  so anyone who has seen the source can forge `user_id=1` and read another account's
+  therapy data. "Warn and continue" was rejected: a log line nobody reads doesn't stop
+  that, and it isn't worth spinning up `uv run uvicorn` just to read one. The check
+  does not branch on `APP_BASE_URL` to guess dev vs. prod either — that is a heuristic
+  that fails exactly when it matters, since a real deployment behind a reverse proxy
+  routinely has `APP_BASE_URL` set to `http://`. `.env.example` ships `SECRET_KEY=`
+  **empty**, not a placeholder, because `${SECRET_KEY:?}` in compose only catches unset
+  or empty — a placeholder string sails right through it, and copying `.env.example` to
+  `.env` untouched is the single most common way this is triggered. `Settings.secret_key`
+  keeps its insecure default and has no validator on the class itself, because
+  `Settings()` must still be constructible without any environment for tests that build
+  it directly; the refusal happens once, at boot, in `app.main.lifespan` before
+  `create_db_engine` runs. (added 2026-08-12)
 
 - **Grafana is not a security boundary.** Per-account separation is real on the FastAPI
   pages and only cosmetic in Grafana's `$user` variable. The README says so explicitly;

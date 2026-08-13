@@ -736,7 +736,7 @@ class TestPerAccountIsolation:
     def test_nights_and_sessions_are_counted_separately(self, client):
         """The machine writes a file per power-on, so a night is usually several
         sessions. Reporting the session count under a "nights" label understates
-        hours per night by the same factor — on real data it understated them by roughly 2.5x.
+        hours per night by the same factor — roughly 2.5x on real data.
         """
         add_user(client, "alice")
         # three sessions, two nights: 21 Aug has two, 22 Aug has one

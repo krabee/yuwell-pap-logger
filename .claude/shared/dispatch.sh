@@ -30,8 +30,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # หา team.conf: ที่เดียวกับสคริปต์ก่อน แล้วค่อยไล่ไปที่ที่ kit ถูกติดตั้ง
 CONF="${TEAM_CONF:-}"
 if [[ -z "$CONF" ]]; then
+  # ../../ = root ของ repo ซึ่งเป็นที่ที่ team.conf.example บอกให้วางไฟล์จริง
+  # (ขาดบรรทัดนี้ไป dispatch.sh เลยหา team.conf ที่ root ไม่เจอ ต้องตั้ง TEAM_CONF เอง)
   for c in "$SCRIPT_DIR/team.conf" \
            "$SCRIPT_DIR/../team.conf" \
+           "$SCRIPT_DIR/../../team.conf" \
            "$SCRIPT_DIR/../../references/agents-team/team.conf"; do
     [[ -f "$c" ]] && { CONF="$c"; break; }
   done
